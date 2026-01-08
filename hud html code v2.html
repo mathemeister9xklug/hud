@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gina's Math-Base: Ultimate</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #f0f2f5; --card-bg: #ffffff; --primary: #6366f1; --accent: #ec4899;
+            --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --locked: #94a3b8;
+            --text-dark: #1e293b; --text-light: #64748b;
+        }
+
+        body { font-family: 'Poppins', sans-serif; background-color: var(--bg-color); color: var(--text-dark); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { max-width: 950px; width: 100%; display: flex; flex-direction: column; gap: 25px; }
+
+        /* HEADER */
+        .top-section { display: grid; grid-template-columns: 1fr 1.2fr; gap: 25px; background: var(--card-bg); padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        .chart-wrapper { position: relative; height: 320px; width: 100%; display: flex; justify-content: center; align-items: center; }
+        .stats-wrapper { display: flex; flex-direction: column; justify-content: center; padding-left: 10px; }
+        
+        .user-name { font-size: 2.5rem; font-weight: 700; margin: 0; background: linear-gradient(120deg, var(--primary), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .level-badge { background: #e0e7ff; color: var(--primary); padding: 4px 12px; border-radius: 12px; font-weight: 600; font-size: 0.9rem; display: inline-block; }
+        .total-score { font-size: 2rem; font-weight: 600; margin-bottom: 15px; }
+        .stat-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .highlight-pill { background: #f1f5f9; padding: 4px 12px; border-radius: 8px; font-weight: 600; font-size: 0.9rem; border: 1px solid #e2e8f0; }
+
+        /* THEMEN KARTEN */
+        .category-card { background: var(--card-bg); border-radius: 15px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.03); margin-bottom: 15px; border: 1px solid #f1f5f9; }
+        .category-header { padding: 18px 25px; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s; }
+        .category-header:hover { background: #f1f5f9; }
+        .cat-title { font-size: 1.2rem; font-weight: 700; display: flex; align-items: center; gap: 12px; }
+        
+        .category-content { padding: 0 25px; max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out, padding 0.3s ease; background: white; }
+        .category-content.open { padding: 25px; max-height: 3000px; border-top: 1px solid #e2e8f0; }
+
+        .subtopic { margin-bottom: 30px; }
+        .subtopic h3 { margin: 0 0 12px 0; font-size: 0.95rem; color: var(--text-light); text-transform: uppercase; letter-spacing: 1.2px; font-weight: 700; }
+        
+        /* PILLS */
+        .pill-container { display: flex; flex-wrap: wrap; gap: 8px; }
+        .pill { padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 6px; cursor: default; border: 1px solid transparent; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .pill:hover { transform: translateY(-2px); }
+
+        /* STATES */
+        .pill-green { background-color: #dcfce7; color: #15803d; border-color: #86efac; }
+        .pill-yellow { background-color: #fef9c3; color: #a16207; border-color: #fde047; }
+        .pill-red { background-color: #fee2e2; color: #b91c1c; border-color: #fca5a5; }
+        .pill-gray { background-color: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; }
+
+        /* DEBUG AREA (Nur sichtbar wenn was fehlt) */
+        #unsorted-area { border: 2px dashed #f59e0b; padding: 20px; border-radius: 15px; background: #fffbeb; margin-top: 30px; display: none; }
+        .debug-pill { background: white; border: 1px solid #fcd34d; padding: 8px 12px; margin: 4px; border-radius: 8px; display: inline-block; font-size: 0.85rem; cursor: pointer; }
+
+        @media (max-width: 768px) { .top-section { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="top-section">
+        <div class="chart-wrapper">
+            <canvas id="skillRadar"></canvas>
+        </div>
+        <div class="stats-wrapper">
+            <div class="user-header">
+               
+                <h1 class="user-name">Minous Progress</h1>
+            </div>
+            <div class="total-score">Themen: <span id="stat-count">0</span></div>
+            <div class="stat-row">
+                <span>⏳ Zuletzt gelernt:</span>
+                <span class="highlight-pill" id="stat-last">...</span>
+            </div>
+            <div style="margin-top:15px; font-size:0.85rem; color:#64748b">
+                Datenbank Status: <span id="connection-status">Verbinde...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="category-card">
+        <div class="category-header" onclick="toggleCat(this)">
+            <div class="cat-title">🧮 Basics & Algebra</div>
+            <div class="cat-score">Klick mich ▼</div>
+        </div>
+        <div class="category-content open">
+            <div class="subtopic">
+                <h3>Zahlen & Operationen</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="1">Grundrechenarten</div>
+                    <div class="pill pill-gray" data-id="2">Runden & Schätzen</div>
+                    <div class="pill pill-gray" data-id="3">Teilbarkeit (ggT/kgV)</div>
+                    <div class="pill pill-gray" data-id="5">Größen (Geld, Zeit)</div>
+                    <div class="pill pill-gray" data-id="4">Potenzen (Einführung)</div>
+                </div>
+            </div>
+            <div class="subtopic">
+                <h3>Brüche & Dezimalzahlen</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="6">Erweitern & Kürzen</div>
+                    <div class="pill pill-gray" data-id="7">Rechnen mit Brüchen</div>
+                    <div class="pill pill-gray" data-id="8">Negative Zahlen (ℤ)</div>
+                </div>
+            </div>
+             <div class="subtopic">
+                <h3>Prozent & Zins</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="9">Grundwert / Prozentwert</div>
+                    <div class="pill pill-gray" data-id="10">Zinseszins</div>
+                </div>
+            </div>
+            <div class="subtopic">
+                <h3>Terme & Gleichungen</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="11">Ausklammern & Multipl.</div>
+                    <div class="pill pill-gray" data-id="12">Binomische Formeln</div>
+                    <div class="pill pill-gray" data-id="13">Lineare Gleichungen</div>
+                    <div class="pill pill-gray" data-id="14">Wurzeln & Irrationalität</div>
+                    <div class="pill pill-gray" data-id="15">Potenzgesetze</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="category-card">
+        <div class="category-header" onclick="toggleCat(this)">
+            <div class="cat-title">📈 Funktionen & Analysis</div>
+            <div class="cat-score">Klick mich ▼</div>
+        </div>
+        <div class="category-content"> 
+            <div class="subtopic">
+                <h3>Lineare Funktionen</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="16">Proportionale Zuordnung</div>
+                    <div class="pill pill-gray" data-id="17">Lineare Fkt (Steigung)</div>
+                </div>
+            </div>
+            <div class="subtopic">
+                <h3>Quadratische & Wachstumsfkt.</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="18">Scheitelpunktform</div>
+                    <div class="pill pill-gray" data-id="19">PQ-Formel / Mitternacht</div>
+                    <div class="pill pill-gray" data-id="20">Exponentielles Wachstum</div>
+                    <div class="pill pill-gray" data-id="21">Logarithmus Grundlagen</div>
+                </div>
+            </div>
+            <div class="subtopic">
+                <h3>Differentialrechnung (Oberstufe)</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="22">Ableitungsregeln</div>
+                    <div class="pill pill-gray" data-id="23">Kurvendiskussion (HP/TP)</div>
+                    <div class="pill pill-gray" data-id="24">Extremwertaufgaben</div>
+                    <div class="pill pill-gray" data-id="25">Produkt- & Kettenregel</div>
+                    <div class="pill pill-gray" data-id="26">e-Funktionen</div>
+                    <div class="pill pill-gray" data-id="27">Logarithmusfunktionen</div>
+                </div>
+            </div>
+             <div class="subtopic">
+                <h3>Integralrechnung (Oberstufe)</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="28">Stammfunktionen</div>
+                    <div class="pill pill-gray" data-id="29">Flächenberechnung</div>
+                    <div class="pill pill-gray" data-id="30">Rotationskörper</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="category-card">
+        <div class="category-header" onclick="toggleCat(this)">
+            <div class="cat-title">📐 Geometrie</div>
+            <div class="cat-score">Klick mich ▼</div>
+        </div>
+        <div class="category-content">
+            <div class="subtopic">
+                <h3>Ebene Geometrie</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="31">Winkel messen</div>
+                    <div class="pill pill-gray" data-id="32">Symmetrie</div>
+                    <div class="pill pill-gray" data-id="33">Flächen (Rechteck/Q)</div>
+                    <div class="pill pill-gray" data-id="34">Winkelsätze Dreieck</div>
+                    <div class="pill pill-gray" data-id="35">Konstruktion & Kongruenz</div>
+                    <div class="pill pill-gray" data-id="36">Satz des Thales</div>
+                </div>
+            </div>
+            <div class="subtopic">
+                <h3>Trigonometrie & Raum</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="37">Satz des Pythagoras</div>
+                    <div class="pill pill-gray" data-id="38">Sinus, Cosinus, Tangens</div>
+                    <div class="pill pill-gray" data-id="39">Sinus-/Kosinussatz</div>
+                    <div class="pill pill-gray" data-id="40">Körper (Volumen/Oberfl.)</div>
+                </div>
+            </div>
+            <div class="subtopic">
+                <h3>Vektorrechnung (Oberstufe)</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="41">Vektoren Basics</div>
+                    <div class="pill pill-gray" data-id="42">Geraden im Raum</div>
+                    <div class="pill pill-gray" data-id="43">Ebenen im Raum</div>
+                    <div class="pill pill-gray" data-id="44">Lagebeziehungen</div>
+                    <div class="pill pill-gray" data-id="45">Skalarprodukt</div>
+                    <div class="pill pill-gray" data-id="46">Vektorprodukt (Kreuz)</div>
+                    <div class="pill pill-gray" data-id="47">Abstandsberechnungen</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="category-card">
+        <div class="category-header" onclick="toggleCat(this)">
+            <div class="cat-title">🎲 Stochastik</div>
+            <div class="cat-score">Klick mich ▼</div>
+        </div>
+        <div class="category-content">
+            <div class="subtopic">
+                <h3>Grundlagen</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="48">Laplace-Wahrscheinlichkeit</div>
+                    <div class="pill pill-gray" data-id="49">Baumdiagramme</div>
+                    <div class="pill pill-gray" data-id="50">Vierfeldertafel</div>
+                </div>
+            </div>
+            <div class="subtopic">
+                <h3>Statistik (Oberstufe)</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="51">Bernoulli & Binomial</div>
+                    <div class="pill pill-gray" data-id="52">Hypothesentests</div>
+                    <div class="pill pill-gray" data-id="53">Normalverteilung</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="unsorted-area">
+        <h3 style="margin-top:0; color:#b45309">⚡ Unbekannte IDs</h3>
+        <p style="font-size:0.9rem; color:#78350f">Falls hier noch etwas auftaucht, fehlt es oben im Code.</p>
+        <div id="new-items-container"></div>
+    </div>
+
+</div>
+
+<script>
+    // ===============================================
+    // KONFIGURATION (Deine Keys)
+    // ===============================================
+    const SUPABASE_URL = 'https://utykjjsnmldqisvgdqrc.supabase.co'; 
+    const SUPABASE_KEY = 'sb_publishable_SGK-4bvmTGNdFiJHgfx2Uw_Ln35DfsH'; 
+    const STUDENT_ID = '22473f48-cb8e-4c5e-b952-7799e1f9d01b';
+
+    const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function initDashboard() {
+        const statusSpan = document.getElementById('connection-status');
+        
+        try {
+            const { data, error } = await sbClient
+                .from('student_progress')
+                .select('*')
+                .eq('student_id', STUDENT_ID);
+
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                statusSpan.innerHTML = "Keine Daten gefunden."; return;
+            }
+
+            statusSpan.innerHTML = `✅ ${data.length} Themen geladen`;
+            document.getElementById('stat-count').innerText = data.length;
+            if(data[0].last_updated) {
+                document.getElementById('stat-last').innerText = new Date(data[0].last_updated).toLocaleDateString();
+            }
+
+            const unsortedContainer = document.getElementById('new-items-container');
+            const unsortedArea = document.getElementById('unsorted-area');
+            
+            data.forEach(entry => {
+                const id = entry.curriculum_id;
+                const score = entry.mastery_score;
+                // Kontext kürzen für Vorschau
+                let contextPreview = entry.ai_learning_context || "Kein Titel";
+                if(contextPreview.length > 30) contextPreview = contextPreview.substring(0, 30) + "...";
+
+                const pill = document.querySelector(`.pill[data-id="${id}"]`);
+
+                if (pill) {
+                    // WENN ZUGEORDNET:
+                    pill.classList.remove('pill-gray');
+                    pill.title = entry.ai_learning_context;
+                    
+                    if (score >= 80) {
+                        pill.classList.add('pill-green');
+                        pill.innerHTML = '✓ ' + pill.innerText;
+                    } else {
+                        pill.classList.add('pill-yellow');
+                        pill.innerHTML = '⚠ ' + pill.innerText;
+                    }
+                } else {
+                    // WENN NICHT ZUGEORDNET:
+                    unsortedArea.style.display = 'block';
+                    const debugPill = document.createElement('div');
+                    debugPill.className = 'debug-pill';
+                    debugPill.innerHTML = `<b>ID ${id}</b>: ${contextPreview}`;
+                    debugPill.onclick = () => alert(`Thema für ID ${id}:\n\n${entry.ai_learning_context}`);
+                    unsortedContainer.appendChild(debugPill);
+                }
+            });
+
+        } catch (err) {
+            console.error(err);
+            statusSpan.innerText = "Fehler beim Laden.";
+        }
+    }
+
+    function toggleCat(header) { header.nextElementSibling.classList.toggle('open'); }
+    initDashboard();
+
+    // Chart Dummy
+    new Chart(document.getElementById('skillRadar'), {
+        type: 'radar',
+        data: {
+            labels: ['Algebra', 'Funktionen', 'Geometrie', 'Stochastik'],
+            datasets: [{
+                label: 'Skill',
+                data: [60, 40, 80, 20],
+                backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                borderColor: '#6366f1',
+                pointBackgroundColor: '#ec4899',
+            }]
+        },
+        options: { scales: { r: { ticks: { display: false } } } }
+    });
+</script>
+
+</body>
+</html>
