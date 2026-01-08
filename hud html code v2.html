@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gina's Math-Base: Live Edition</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg-color: #f0f2f5;
+            --card-bg: #ffffff;
+            --primary: #6366f1;
+            --accent: #ec4899;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --locked: #94a3b8;
+            --text-dark: #1e293b;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 950px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        /* --- OBERE SEKTION --- */
+        .top-section {
+            display: grid;
+            grid-template-columns: 1fr 1.2fr;
+            gap: 25px;
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+        }
+
+        .chart-wrapper { position: relative; height: 320px; width: 100%; }
+        .stats-wrapper { display: flex; flex-direction: column; justify-content: center; padding-left: 10px; }
+
+        .user-name {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 0;
+            background: linear-gradient(120deg, var(--primary), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .level-badge { background: #e0e7ff; color: var(--primary); padding: 4px 12px; border-radius: 12px; font-weight: 600; font-size: 0.9rem; }
+        .stat-row { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; font-weight: 500; }
+
+        /* --- THEMEN BEREICH --- */
+        .category-card { background: var(--card-bg); border-radius: 15px; margin-bottom: 15px; border: 1px solid #f1f5f9; overflow: hidden; }
+        .category-header { padding: 18px 25px; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-weight: 700; }
+        .category-header:hover { background: #f1f5f9; }
+        
+        .category-content { padding: 0 25px; max-height: 0; overflow: hidden; transition: all 0.4s ease; background: white; }
+        .category-content.open { padding: 25px; max-height: 2000px; border-top: 1px solid #e2e8f0; }
+
+        .subtopic { margin-bottom: 30px; }
+        .subtopic h3 { margin: 0 0 12px 0; font-size: 0.95rem; color: #64748b; text-transform: uppercase; letter-spacing: 1.2px; }
+
+        /* --- PILLS (Die Lern-Karten) --- */
+        .pill-container { display: flex; flex-wrap: wrap; gap: 8px; }
+        
+        .pill {
+            padding: 6px 14px; border-radius: 20px; font-size: 0.85rem; font-weight: 500;
+            border: 1px solid transparent; transition: all 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            cursor: default; display: flex; align-items: center; gap: 6px;
+        }
+
+        /* Status Farben */
+        .pill-green { background-color: #dcfce7; color: #15803d; border-color: #86efac; }
+        .pill-yellow { background-color: #fef9c3; color: #a16207; border-color: #fde047; }
+        .pill-gray { background-color: #f1f5f9; color: #94a3b8; border-color: #e2e8f0; }
+
+        /* --- DEBUG BEREICH (Für neue IDs) --- */
+        #unsorted-area {
+            border: 2px dashed #cbd5e1;
+            padding: 20px;
+            border-radius: 15px;
+            background: #f8fafc;
+            margin-top: 30px;
+            display: none; /* Wird sichtbar, wenn Daten da sind */
+        }
+        .debug-entry { font-family: monospace; font-size: 0.8rem; background: #fff; padding: 5px; margin: 2px; border: 1px solid #ddd; display: block; }
+
+        @media (max-width: 768px) { .top-section { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="top-section">
+        <div class="chart-wrapper">
+            <canvas id="skillRadar"></canvas>
+        </div>
+        <div class="stats-wrapper">
+            <div style="margin-bottom: 20px;">
+                <span class="level-badge">Klasse 8 • Supabase Live</span>
+                <h1 class="user-name">Minou's Progress</h1>
+            </div>
+            <div class="stat-row">📚 Themen bearbeitet: <b id="stat-count">0</b></div>
+            <div class="stat-row">⏳ Zuletzt gelernt: <span id="stat-last" style="color:var(--primary)">-</span></div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #ecfdf5; border-radius: 10px; color: #065f46; font-size: 0.9rem;">
+                Daten kommen live aus der Datenbank.<br>
+                Status: <span id="connection-status">Verbinde...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="category-card">
+        <div class="category-header" onclick="toggleCat(this)">
+            <span>🧮 Mathe Themen</span>
+            <span>Klick mich ▼</span>
+        </div>
+        <div class="category-content open">
+            <div class="subtopic">
+                <h3>Bekannte Themen (Beispiele)</h3>
+                <div class="pill-container">
+                    <div class="pill pill-gray" data-id="31">Lineare Funktionen (ID 31?)</div>
+                    <div class="pill pill-gray" data-id="38">Parabeln (ID 38?)</div>
+                    <div class="pill pill-gray" data-id="15">Brüche</div>
+                    <div class="pill pill-gray" data-id="10">Geometrie</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="unsorted-area">
+        <h3 style="margin-top:0; color:var(--warning)">⚡ Neu entdeckte Datenbank-Einträge</h3>
+        <p style="font-size:0.9rem; color:#64748b">Diese IDs wurden in Supabase gefunden, aber sind noch keiner Kategorie im HTML zugeordnet:</p>
+        <div class="pill-container" id="new-items-container"></div>
+    </div>
+
+</div>
+
+
+
+<script>
+    // ==========================================
+    // ⚙️ KONFIGURATION
+    // ==========================================
+    
+    // Deine URL und KEY (Achte darauf, dass keine Leerzeichen am Ende sind!)
+    const SUPABASE_URL = 'https://utykjjsnmldqisvgdqrc.supabase.co'; 
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV0eWtqanNubWxkcWlzdmdkcXJjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyNTE1NjIsImV4cCI6MjA4MTgyNzU2Mn0.Mz_NWU4AeEA68k3YZiAeeDTiD2Ir1znV-BI0YDtWjJ4';
+
+    // Minous ID (Fest hinterlegt)
+    const STUDENT_ID = '22473f48-cb8e-4c5e-b952-7799e1f9d01b';
+
+    // ==========================================
+
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    async function initDashboard() {
+        const statusSpan = document.getElementById('connection-status');
+        
+        try {
+            console.log("Starte Verbindung zu Supabase...");
+            statusSpan.innerText = "⏳ Lade Daten für Minou...";
+
+            // 1. Daten holen (MIT ID FILTER!)
+            const { data, error } = await supabase
+                .from('student_progress')
+                .select('*')
+                .eq('student_id', STUDENT_ID); // <--- Nur Minous Daten holen!
+
+            if (error) {
+                console.error("Supabase Fehler:", error);
+                throw error;
+            }
+
+            if (!data || data.length === 0) {
+                statusSpan.innerHTML = "⚠️ Verbindung OK, aber <b>0 Einträge</b> gefunden.<br><small>Ist die Tabelle 'student_progress' leer oder die ID falsch?</small>";
+                return;
+            }
+
+            // ERFOLG!
+            statusSpan.innerHTML = "✅ <b>Erfolg!</b> " + data.length + " Einträge für Minou geladen.";
+            document.getElementById('stat-count').innerText = data.length;
+            
+            // Datum formatieren
+            if(data.length > 0 && data[0].last_updated) {
+                const lastDate = new Date(data[0].last_updated).toLocaleDateString('de-DE');
+                document.getElementById('stat-last').innerText = lastDate;
+            }
+
+            // 2. Daten verarbeiten
+            const unsortedContainer = document.getElementById('new-items-container');
+            const unsortedArea = document.getElementById('unsorted-area');
+            
+            data.forEach(entry => {
+                const id = entry.curriculum_id;
+                const score = entry.mastery_score;
+                const context = entry.ai_learning_context || "Kein Kontext";
+                
+                // Suche Pille im HTML
+                const pill = document.querySelector(`.pill[data-id="${id}"]`);
+
+                if (pill) {
+                    // A) Pille existiert -> Einfärben
+                    pill.classList.remove('pill-gray');
+                    pill.title = context;
+                    
+                    if (score >= 80) {
+                        pill.classList.add('pill-green');
+                        pill.innerHTML = '✓ ' + pill.innerText;
+                    } else {
+                        pill.classList.add('pill-yellow');
+                        pill.innerHTML = '⚠ ' + pill.innerText;
+                    }
+                } else {
+                    // B) Pille existiert nicht -> In Sammelbox werfen
+                    unsortedArea.style.display = 'block';
+                    
+                    const newPill = document.createElement('div');
+                    newPill.className = 'pill pill-yellow';
+                    newPill.innerHTML = `<b>ID ${id}</b>: Gelernt`;
+                    newPill.title = context;
+                    newPill.onclick = () => alert(`Thema ID: ${id}\n\nNotiz:\n${context}`);
+                    
+                    unsortedContainer.appendChild(newPill);
+                }
+            });
+
+        } catch (err) {
+            console.error(err);
+            // Zeige den Fehler direkt im Dashboard an
+            statusSpan.innerHTML = `❌ <b>FEHLER:</b><br>${err.message || JSON.stringify(err)}`;
+            statusSpan.style.color = "red";
+        }
+    }
+
+    // Toggle Funktion
+    function toggleCat(header) {
+        header.nextElementSibling.classList.toggle('open');
+    }
+
+    // Starten
+    initDashboard();
+
+    // Chart
+    new Chart(document.getElementById('skillRadar'), {
+        type: 'radar',
+        data: {
+            labels: ['Algebra', 'Funktionen', 'Geometrie', 'Stochastik'],
+            datasets: [{
+                label: 'Skill',
+                data: [65, 59, 90, 81],
+                backgroundColor: 'rgba(99, 102, 241, 0.2)',
+                borderColor: '#6366f1',
+                pointBackgroundColor: '#ec4899',
+            }]
+        },
+        options: { scales: { r: { ticks: { display: false } } } }
+    });
+</script>
+
+</body>
+</html>
